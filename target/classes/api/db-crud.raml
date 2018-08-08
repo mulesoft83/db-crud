@@ -1,0 +1,23 @@
+#%RAML 1.0
+title: db-cru
+
+
+
+/students:
+  get:
+    responses: 
+      200:
+        body: 
+          application/xml:
+            example: !include example-files/student.xml
+             
+  post:
+    body: 
+      application/xml:
+        example: !include example-files/student.xml
+    responses: 
+      200:
+        body: 
+          application/json:
+          
+            example: !include example-files/message_saved.json

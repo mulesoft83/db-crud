@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:api-gateway="http://www.mulesoft.org/schema/mule/api-gateway" xmlns:os="http://www.mulesoft.org/schema/mule/os"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+http://www.mulesoft.org/schema/mule/api-gateway http://www.mulesoft.org/schema/mule/api-gateway/current/mule-api-gateway.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="1d4cba39-a7c4-4125-8e2a-711b7388e88c" >
+		<http:listener-connection host="${http.host}" port="${http.port.targetAPI}" />
+	</http:listener-config>
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="8e371165-6ff0-4a70-b272-f4f049d1b3ea" >
+		<db:my-sql-connection host="${db.host}" port="${db.port}" user="${db.username}" password="${db.password}" database="${db.dbname}" >
+			<db:connection-properties >
+				<db:connection-property key="useSSL" value="false" />
+			</db:connection-properties>
+		</db:my-sql-connection>
+	</db:config>
+	<http:request-config name="HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="9c7f0795-0054-4d6f-a0ce-62ff192284d9" >
+		<http:request-connection host="${http.host}" port="${http.port.targetAPI}" connectionIdleTimeout="-1"/>
+	</http:request-config>
+	<configuration-properties doc:name="Configuration properties" doc:id="24400fae-cfa7-48dc-9243-46811b21fb3a" file="db-config-DEV.properties" />
+	<os:object-store name="Object_store" doc:name="Object store" doc:id="7474d8be-1263-4b9b-b217-88f6eadb4a90" />
+	<flow name="AutomaticSchedular" doc:id="131888af-14b0-4a3f-af99-3b8358eb0110" >
+		<scheduler doc:name="Scheduler" doc:id="48e40371-9227-4881-b0d4-e9eb513571dd">
+			<scheduling-strategy>
+				<fixed-frequency frequency="${sch.time}" timeUnit="SECONDS" startDelay="${sch.time}"/>
+			</scheduling-strategy>
+		</scheduler>
+		<os:retrieve doc:name="Retrieve" doc:id="920fca48-99b1-4c28-8c3f-cae7c441a95e" key="maxId" objectStore="Object_store">
+			<os:default-value><![CDATA[0]]></os:default-value>
+		</os:retrieve>
+		<db:select doc:name="Select" doc:id="353db0e4-589f-4d3a-8f52-a9be7d4cdb31" config-ref="Database_Config">
+			<ee:repeatable-file-store-iterable />
+			<db:sql>SELECT * FROM `student` WHERE id &gt;:ID</db:sql>
+			<db:input-parameters><![CDATA[#[{
+ID:payload
+}]]]></db:input-parameters>
+		</db:select>
+		<set-variable value="#[max(payload map $.id)]" doc:name="Set Variable" doc:id="f8db4c43-bc83-4d77-ac78-e4556103788e" variableName="maxId" />
+		<flow-ref doc:name="SelectFlow" doc:id="83e75f51-aba7-45d7-b943-3cca095d7c1f" name="SelectFlow"/>
+	</flow>
+	<flow name="exposeDBAPI" doc:id="9580b784-5fd5-49ff-82dc-e1319a96fc4f" >
+		<http:listener doc:name="exposeDBAPI" doc:id="f127c539-ec6e-4fe0-b0bc-0f7b7cc42e5b" config-ref="HTTP_Listener_config" path="/exposeDBAPI">
+			<ee:repeatable-file-store-stream />
+		</http:listener>
+		<flow-ref doc:name="SelectFlow" doc:id="e418fabb-5f5a-4cd4-afa9-a2dfb24430f2" name="SelectFlow"/>
+	</flow>
+	<flow name="SelectFlow" doc:id="03c8dbb2-82da-4183-ae9e-225dc1384525" >
+		<logger level="INFO" doc:name="Logger" doc:id="08647f68-1d1d-4c7c-8e6e-38902078f862" message="#[payload]"/>
+		<choice doc:name="Choice" doc:id="9d559ed4-b95c-4382-a215-4a81eac18071">
+			<when expression="sizeOf(payload)&gt;0">
+				<foreach doc:name="For Each" doc:id="2120b500-6cb7-4d1f-b918-8d7391e763eb" collection="payload">
+					<ee:transform doc:name="Transform Message" doc:id="6b31bb1f-4845-46b8-a0f1-6bf242eab95c">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/xml
+---
+{
+	student:payload
+}
+
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+					<logger level="INFO" doc:name="Logger" doc:id="bfa8c874-3588-4ec4-aac6-006611af8b5a" message="#[payload]" />
+					<http:request method="POST" doc:name="Request" doc:id="82ddf2bd-50a2-4dee-8ccb-e37ca084242c" config-ref="HTTP_Request_configuration" path="/insertTargetAPI" responseTimeout="1200000">
+					</http:request>
+					<os:store doc:name="Store" doc:id="00362e92-e6bf-4d02-93f1-b397eaa2c063" key="maxId" objectStore="Object_store" failOnNullValue="false">
+						<os:value><![CDATA[#[vars.maxId]]]></os:value>
+		</os:store>
+					<ee:transform doc:name="Transform Message" doc:id="5fc33442-6b23-4891-b743-780db53fe1b4">
+						<ee:message>
+							<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"DataBaseResponse from Target":payload
+}
+]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<logger level="INFO" doc:name="Logger" doc:id="797aac74-6355-4905-9df2-70dfc4279d25" message="#[payload]" />
+				</foreach>
+			</when>
+			<otherwise>
+				<logger level="INFO" doc:name="Logger" doc:id="8d7530d3-5dba-43b8-8caf-5f87d43db588" message="no data available for update" />
+				<ee:transform doc:name="Transform Message" doc:id="86e5cf75-4d85-4280-a3a8-9c4617e9819c">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+{
+	"DB Response":"No Record available for process"
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</otherwise>
+		</choice>
+	</flow>
+	<flow name="insertTargetAPI" doc:id="d2a694fa-5a13-4858-a2f2-7e8c5cd9116a" >
+		<http:listener doc:name="Listener" doc:id="1859f759-92ea-4150-8291-9c2b134d7a9c" config-ref="HTTP_Listener_config" path="/insertTargetAPI">
+			<ee:repeatable-file-store-stream />
+		</http:listener>
+		<logger level="INFO" doc:name="Logger" doc:id="01dc2e3d-bbda-4c2d-b0fa-d86fd13b8bae" message="#[payload]"/>
+		<ee:transform doc:name="Transform Message" doc:id="06e478a7-5081-46c6-ab5a-428aebb1d5a6" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<db:insert doc:name="insert" doc:id="404e674a-86c2-418e-90a3-11f040ffb58a" config-ref="Database_Config" queryTimeout="3" queryTimeoutUnit="MINUTES">
+			<db:sql>
+INSERT INTO `student1` (`name`, `age`) VALUES (:NAME, :AGE);</db:sql>
+			<db:input-parameters><![CDATA[#[{
+
+NAME:payload.student.name,
+AGE:payload.student.age
+}]]]></db:input-parameters>
+		</db:insert>
+		<ee:transform doc:name="Transform Message" doc:id="3b7c7c92-4bb8-4806-bddc-0c3396964dc7" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>

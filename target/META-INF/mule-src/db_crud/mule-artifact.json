@@ -1,0 +1,27 @@
+{
+  "configs": [
+    "db-crud.xml",
+    "db_crud.xml"
+  ],
+  "secureProperties": [],
+  "redeploymentEnabled": true,
+  "name": "db_crud",
+  "minMuleVersion": "4.1.2",
+  "requiredProduct": "MULE_EE",
+  "classLoaderModelLoaderDescriptor": {
+    "id": "mule",
+    "attributes": {
+      "exportedPackages": [],
+      "exportedResources": [
+        "api/.gitignore",
+        "api/db-crud.raml",
+        "api/example-files/message_saved.json",
+        "api/example-files/student.xml"
+      ]
+    }
+  },
+  "bundleDescriptorLoader": {
+    "id": "mule",
+    "attributes": {}
+  }
+}
